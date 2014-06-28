@@ -14,10 +14,19 @@ namespace HWI\Bundle\OAuthBundle\Security\Http\Firewall;
 use HWI\Bundle\OAuthBundle\OAuth\ResourceOwnerInterface;
 use HWI\Bundle\OAuthBundle\Security\Core\Authentication\Token\OAuthToken;
 use HWI\Bundle\OAuthBundle\Security\Http\ResourceOwnerMap;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Security\Core\Authentication\AuthenticationManagerInterface;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
+use Symfony\Component\Security\Core\SecurityContextInterface;
+use Symfony\Component\Security\Http\Authentication\AuthenticationFailureHandlerInterface;
+use Symfony\Component\Security\Http\Authentication\AuthenticationSuccessHandlerInterface;
 use Symfony\Component\Security\Http\Firewall\AbstractAuthenticationListener;
+use Symfony\Component\Security\Http\HttpUtils;
+use Symfony\Component\Security\Http\Session\SessionAuthenticationStrategyInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * OAuthListener
@@ -36,6 +45,16 @@ class OAuthListener extends AbstractAuthenticationListener
      * @var array
      */
     private $checkPaths;
+
+    private $successHandler;
+
+    public function __construct(SecurityContextInterface $securityContext, AuthenticationManagerInterface $authenticationManager, SessionAuthenticationStrategyInterface $sessionStrategy, HttpUtils $httpUtils, $providerKey, AuthenticationSuccessHandlerInterface $successHandler, AuthenticationFailureHandlerInterface $failureHandler, array $options = array(), LoggerInterface $logger = null, EventDispatcherInterface $dispatcher = null)
+    {
+        $this->successHandler = $successHandler;
+
+        parent::__construct($securityContext, $authenticationManager, $sessionStrategy, $httpUtils, $providerKey, $successHandler, $failureHandler, $options, $logger , $dispatcher);
+
+    }
 
     /**
      * @var ResourceOwnerMap $resourceOwnerMap
@@ -103,7 +122,13 @@ class OAuthListener extends AbstractAuthenticationListener
         $token = new OAuthToken($accessToken);
         $token->setResourceOwnerName($resourceOwner->getName());
 
-        return $this->authenticationManager->authenticate($token);
+        $returnValue = $this->authenticationManager->authenticate($token);
+
+        if ($returnValue instanceof TokenInterface) {
+            $response = $this->successHandler->onAuthenticationSuccess($request, $token);
+        }
+
+        return $returnValue;
     }
 
     /**
